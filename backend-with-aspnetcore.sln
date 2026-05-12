@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.37216.2
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetCore.API", "NetCore.API\NetCore.API.csproj", "{7F69FACF-7FFC-4D9F-ACE6-489E69038244}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NetCore.DataAccess", "NetCore.DataAccess\NetCore.DataAccess.csproj", "{2001D627-050C-432D-A224-6CAA5A5E295C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{7F69FACF-7FFC-4D9F-ACE6-489E69038244}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7F69FACF-7FFC-4D9F-ACE6-489E69038244}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7F69FACF-7FFC-4D9F-ACE6-489E69038244}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2001D627-050C-432D-A224-6CAA5A5E295C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2001D627-050C-432D-A224-6CAA5A5E295C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2001D627-050C-432D-A224-6CAA5A5E295C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2001D627-050C-432D-A224-6CAA5A5E295C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
