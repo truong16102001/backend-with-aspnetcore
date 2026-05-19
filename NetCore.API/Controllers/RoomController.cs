@@ -18,25 +18,78 @@ namespace NetCore.API.Controllers
 
         // GET: api/rooms
         [HttpGet]
-        public async Task<IActionResult> GetRooms([FromQuery] RoomRequest request)
+        public async Task<IActionResult> GetRooms(
+            [FromQuery] RoomRequest request)
         {
-            var result = await _roomServices.GetList(request);
+            var result =
+                await _roomServices.GetList(request);
+
+            return Ok(result);
+        }
+
+        // GET: api/rooms/1
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetRoomById(
+            int id)
+        {
+            var result =
+                await _roomServices.GetById(id);
+
+            if (result == null)
+            {
+                return NotFound();
+            }
 
             return Ok(result);
         }
 
         // POST: api/rooms
         [HttpPost]
-        public async Task<IActionResult> CreateRoom([FromBody] RoomInsertRequest request)
+        public async Task<IActionResult> CreateRoom(
+            [FromBody] RoomInsertRequest request)
         {
-            var result = await _roomServices.Insert(request);
+            var result =
+                await _roomServices.Insert(request);
 
-            if (result.ReturnCode > 0)
+            if (result.ReturnCode < 0)
             {
-                return Ok(result);
+                return BadRequest(result);
             }
 
-            return BadRequest(result);
+            return StatusCode(201, result);
+        }
+
+        // PUT: api/rooms/1
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateRoom(
+            int id,
+            [FromBody] RoomInsertRequest request)
+        {
+            var result =
+                await _roomServices.Update(id, request);
+
+            if (result.ReturnCode < 0)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
+        }
+
+        // DELETE: api/rooms/1
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteRoom(
+            int id)
+        {
+            var result =
+                await _roomServices.Delete(id);
+
+            if (result.ReturnCode < 0)
+            {
+                return BadRequest(result);
+            }
+
+            return Ok(result);
         }
 
     }

@@ -5,10 +5,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace NetCore.DataAccess.IServices
+namespace NetCore.DataAccess.IRepositories
 {
-    public interface IAccountService
+    public interface IRoomRepository:IGenericRepository<Room>
     {
-        Task<ReturnData> Login(AccountLoginDTO requestData);
     }
 }

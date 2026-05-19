@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using NetCore.API;
 using NetCore.DataAccess.DBContext;
+using NetCore.DataAccess.IRepositories;
 using NetCore.DataAccess.IServices;
+using NetCore.DataAccess.Repositories;
 using NetCore.DataAccess.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,8 +15,9 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddScoped<IAccountService, AccountService>(); // khi nào gọi tới IAccountService thì sẽ khởi tạo AccountService
 builder.Services.AddScoped<IRoomServices, RoomServices>();
+builder.Services.AddScoped<IRoomRepository, RoomRepository>();
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
 builder.Services.AddDbContext<MyDbContext>(options =>
                options.UseSqlServer(configuration.GetConnectionString("ConnStr")));
