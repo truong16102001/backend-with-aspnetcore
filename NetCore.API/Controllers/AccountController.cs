@@ -6,7 +6,7 @@ using NetCore.DataAccess.IServices;
 
 namespace NetCore.API.Controllers
 {
-    [Route("api/account")]
+    [Route("api/accounts")]
     [ApiController]
     public class AccountController : ControllerBase
     {
