@@ -6,6 +6,7 @@ using NetCore.DataAccess.IRepositories;
 using NetCore.DataAccess.IServices;
 using NetCore.DataAccess.Repositories;
 using NetCore.DataAccess.Services;
+using NetCore.DataAccess.UnitOfWork;
 
 var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
@@ -15,6 +16,7 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IRoomServices, RoomServices>();
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));

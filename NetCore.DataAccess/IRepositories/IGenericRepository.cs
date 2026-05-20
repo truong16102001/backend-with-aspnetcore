@@ -23,6 +23,5 @@ namespace NetCore.DataAccess.IRepositories
 
         void Delete(T entity);
 
-        Task Save();
     }
 }

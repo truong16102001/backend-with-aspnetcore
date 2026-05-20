@@ -4,6 +4,7 @@ using NetCore.DataAccess.DataObject;
 using NetCore.DataAccess.DBContext;
 using NetCore.DataAccess.IRepositories;
 using NetCore.DataAccess.IServices;
+using NetCore.DataAccess.UnitOfWork;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,11 +15,11 @@ namespace NetCore.DataAccess.Services
 {
     public class RoomServices : IRoomServices
     {
-        private readonly IRoomRepository _roomRepository;
+        private readonly IUnitOfWork _unitOfWork;
 
-        public RoomServices(IRoomRepository roomRepository)
+        public RoomServices(IUnitOfWork unitOfWork)
         {
-            _roomRepository = roomRepository;
+            _unitOfWork = unitOfWork;
         }
 
         public async Task<ReturnData> Insert(RoomInsertRequest request)
@@ -35,9 +36,9 @@ namespace NetCore.DataAccess.Services
                     IsActive = request.IsActive
                 };
 
-                await _roomRepository.Insert(room);
+                await _unitOfWork.Rooms.Insert(room);
 
-                await _roomRepository.Save();
+                await _unitOfWork.SaveChangesAsync();
 
                 result.ReturnCode = 1;
                 result.ReturnMsg = "Insert successful";
@@ -53,7 +54,7 @@ namespace NetCore.DataAccess.Services
 
         public async Task<List<RoomResponse>> GetList(RoomRequest roomsRequest)
         {
-            var query = _roomRepository.Query();
+            var query = _unitOfWork.Rooms.Query();
 
             // Filter
             if (!string.IsNullOrEmpty(
@@ -83,7 +84,7 @@ namespace NetCore.DataAccess.Services
 
         public async Task<RoomResponse?> GetById(int id)
         {
-            var room = await _roomRepository.GetById(id);
+            var room = await _unitOfWork.Rooms.GetById(id);
             if (room == null)
             {
                 return null;
@@ -96,7 +97,7 @@ namespace NetCore.DataAccess.Services
             var result = new ReturnData();
             try
             {
-                var room = await _roomRepository.GetById(id);
+                var room = await _unitOfWork.Rooms.GetById(id);
                 if (room == null)
                 {
                     result.ReturnCode = -1;
@@ -108,8 +109,8 @@ namespace NetCore.DataAccess.Services
                 room.RoomNumber = request.RoomNumber;
                 room.RoomSquare = request.RoomSquare;
                 room.IsActive = request.IsActive;
-                _roomRepository.Update(room);
-                await _roomRepository.Save();
+                _unitOfWork.Rooms.Update(room);
+                await _unitOfWork.SaveChangesAsync();
                 result.ReturnCode = 1;
                 result.ReturnMsg = "Update successful";
             }
@@ -126,7 +127,7 @@ namespace NetCore.DataAccess.Services
 
             try
             {
-                var room = await _roomRepository.GetById(id);
+                var room = await _unitOfWork.Rooms.GetById(id);
 
                 if (room == null)
                 {
@@ -136,9 +137,9 @@ namespace NetCore.DataAccess.Services
                     return result;
                 }
 
-                _roomRepository.Delete(room);
+                _unitOfWork.Rooms.Delete(room);
 
-                await _roomRepository.Save();
+                await _unitOfWork.SaveChangesAsync();
 
                 result.ReturnCode = 1;
                 result.ReturnMsg = "Delete successful";
