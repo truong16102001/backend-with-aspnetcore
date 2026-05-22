@@ -1,22 +1,19 @@
-﻿using NetCore.DataAccess.DataObject;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using NetCore.DataAccess.DataObject.Common;
+using NetCore.DataAccess.DataObject.DTOs.Room;
+using NetCore.DataAccess.DataObject.Entities;
 
 namespace NetCore.DataAccess.IServices
 {
     public interface IRoomServices
     {
-        Task<List<RoomResponse>> GetList(RoomRequest roomsRequest);
+        Task<ServiceResponse<List<RoomResponse>>> GetList(RoomRequest request);
 
-        Task<ReturnData> Insert(RoomInsertRequest roomInsertRequest);
+        Task<ServiceResponse<RoomResponse>> Insert(CreateRoomRequest request);
 
-        Task<RoomResponse?> GetById(int id);
+        Task<ServiceResponse<RoomResponse>> GetById(int id);
 
-        Task<ReturnData> Update(int id, RoomInsertRequest request);
+        Task<ServiceResponse<RoomResponse>> Update(int id, UpdateRoomRequest request);
 
-        Task<ReturnData> Delete(int id);
+        Task<ServiceResponse<bool>> Delete(int id);
     }
 }

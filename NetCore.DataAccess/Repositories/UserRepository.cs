@@ -4,12 +4,11 @@ using NetCore.DataAccess.IRepositories;
 
 namespace NetCore.DataAccess.Repositories
 {
-    public class RoomRepository : GenericRepository<Room>, IRoomRepository
+    public class UserRepository : GenericRepository<User>, IUserRepository
     {
-        public RoomRepository(MyDbContext dbContext)
+        public UserRepository(MyDbContext dbContext)
            : base(dbContext)
         {
-
         }
     }
 }

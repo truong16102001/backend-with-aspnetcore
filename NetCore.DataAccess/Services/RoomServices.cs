@@ -1,15 +1,14 @@
-﻿using Azure.Core;
-using Microsoft.EntityFrameworkCore;
-using NetCore.DataAccess.DataObject;
-using NetCore.DataAccess.DBContext;
-using NetCore.DataAccess.IRepositories;
+﻿using Microsoft.EntityFrameworkCore;
+using NetCore.DataAccess.Common;
+using NetCore.DataAccess.DataObject.Common;
+using NetCore.DataAccess.DataObject.DTOs;
+using NetCore.DataAccess.DataObject.DTOs.Room;
+using NetCore.DataAccess.DataObject.Entities;
 using NetCore.DataAccess.IServices;
 using NetCore.DataAccess.UnitOfWork;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Net;
+using static NetCore.DataAccess.Common.CONSTANT;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace NetCore.DataAccess.Services
 {
@@ -22,10 +21,8 @@ namespace NetCore.DataAccess.Services
             _unitOfWork = unitOfWork;
         }
 
-        public async Task<ReturnData> Insert(RoomInsertRequest request)
+        public async Task<ServiceResponse<RoomResponse>> Insert(CreateRoomRequest request)
         {
-            var result = new ReturnData();
-
             try
             {
                 var room = new Room
@@ -40,117 +37,194 @@ namespace NetCore.DataAccess.Services
 
                 await _unitOfWork.SaveChangesAsync();
 
-                result.ReturnCode = 1;
-                result.ReturnMsg = "Insert successful";
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.Created,
+                    Message = CONSTANT.MESSAGE.CREATE_SUCCESS,
+                    Data = MapToResponse(room)
+                };
             }
             catch (Exception ex)
             {
-                result.ReturnCode = -1;
-                result.ReturnMsg = ex.Message;
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data =null
+                };
             }
-
-            return result;
         }
 
-        public async Task<List<RoomResponse>> GetList(RoomRequest roomsRequest)
+        public async Task<ServiceResponse<List<RoomResponse>>> GetList(RoomRequest request)
         {
-            var query = _unitOfWork.Rooms.Query();
-
-            // Filter
-            if (!string.IsNullOrEmpty(
-                roomsRequest.RoomNumber))
-            {
-                query = query.Where(r =>
-                    r.RoomNumber.Contains(
-                        roomsRequest.RoomNumber));
-            }
-
-            // Sort example
-            query = query.OrderBy(r => r.RoomNumber);
-
-            // Execute SQL here
-            var rooms = await query.ToListAsync();
-
-            // Mapping
-            return rooms.Select(r => new RoomResponse
-            {
-                RoomID = r.RoomID,
-                HotelID = r.HotelID,
-                RoomNumber = r.RoomNumber,
-                RoomSquare = r.RoomSquare,
-                IsActive = r.IsActive == 1
-            }).ToList();
-        }
-
-        public async Task<RoomResponse?> GetById(int id)
-        {
-            var room = await _unitOfWork.Rooms.GetById(id);
-            if (room == null)
-            {
-                return null;
-            }
-            return MapToResponse(room);
-        }
-
-        public async Task<ReturnData> Update(int id, RoomInsertRequest request)
-        {
-            var result = new ReturnData();
             try
             {
-                var room = await _unitOfWork.Rooms.GetById(id);
+                var query = _unitOfWork.Rooms.Query();
+
+                // Filter
+                if (!string.IsNullOrWhiteSpace(
+                    request.RoomNumber))
+                {
+                    query = query.Where(r =>
+                        r.RoomNumber.Contains(
+                            request.RoomNumber));
+                }
+
+                // Sort
+                query = query.OrderBy(r => r.RoomNumber);
+
+                var rooms = await query.ToListAsync();
+
+                var result = rooms
+                    .Select(MapToResponse)
+                    .ToList();
+
+                return new ServiceResponse<List<RoomResponse>>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = CONSTANT.MESSAGE.SUCCESS,
+                    Data = result
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ServiceResponse<List<RoomResponse>>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = null
+                };
+            }
+        }
+
+        public async Task<ServiceResponse<RoomResponse>> GetById(int id)
+        {
+            try
+            {
+                var room =
+                    await _unitOfWork.Rooms.GetById(id);
+
                 if (room == null)
                 {
-                    result.ReturnCode = -1;
-                    result.ReturnMsg = "Room not found";
-
-                    return result;
+                    return new ServiceResponse<RoomResponse>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.NotFound,
+                        Message = CONSTANT.MESSAGE.NOT_FOUND,
+                        Data = null
+                    };
                 }
+
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = CONSTANT.MESSAGE.SUCCESS,
+                    Data = MapToResponse(room)
+                };
+            }
+            catch (Exception ex)
+            {
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = null
+                };
+            }
+        }
+
+        public async Task<ServiceResponse<RoomResponse>> Update(int id, UpdateRoomRequest request)
+        {
+            try
+            {
+                var room =
+                    await _unitOfWork.Rooms.GetById(id);
+
+                if (room == null)
+                {
+                    return new ServiceResponse<RoomResponse>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.NotFound,
+                        Message = CONSTANT.MESSAGE.NOT_FOUND,
+                        Data = null
+                    };
+                }
+
                 room.HotelID = request.HotelID;
                 room.RoomNumber = request.RoomNumber;
                 room.RoomSquare = request.RoomSquare;
                 room.IsActive = request.IsActive;
+
                 _unitOfWork.Rooms.Update(room);
+
                 await _unitOfWork.SaveChangesAsync();
-                result.ReturnCode = 1;
-                result.ReturnMsg = "Update successful";
+
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = CONSTANT.MESSAGE.UPDATE_SUCCESS,
+                    Data = MapToResponse(room)
+                };
             }
-            catch (Exception ex) {
-                result.ReturnCode = -1;
-                result.ReturnMsg = ex.Message;
+            catch (Exception ex)
+            {
+                return new ServiceResponse<RoomResponse>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = null
+                };
             }
-            return result;
         }
 
-        public async Task<ReturnData> Delete(int id)
+        public async Task<ServiceResponse<bool>> Delete(int id)
         {
-            var result = new ReturnData();
-
             try
             {
                 var room = await _unitOfWork.Rooms.GetById(id);
 
                 if (room == null)
                 {
-                    result.ReturnCode = -1;
-                    result.ReturnMsg = "Room not found";
-
-                    return result;
+                    return new ServiceResponse<bool>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.NotFound,
+                        Message = CONSTANT.MESSAGE.NOT_FOUND,
+                        Data = default
+                    };
                 }
 
                 _unitOfWork.Rooms.Delete(room);
 
                 await _unitOfWork.SaveChangesAsync();
 
-                result.ReturnCode = 1;
-                result.ReturnMsg = "Delete successful";
+                return new ServiceResponse<bool>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = CONSTANT.MESSAGE.DELETE_SUCCESS,
+                    Data = true
+                };
             }
             catch (Exception ex)
             {
-                result.ReturnCode = -1;
-                result.ReturnMsg = ex.Message;
+                return new ServiceResponse<bool>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = default
+                };
             }
-
-            return result;
         }
 
         private RoomResponse MapToResponse(Room room)

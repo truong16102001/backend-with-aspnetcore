@@ -1,0 +1,89 @@
+ ======== 	TRIỂN KHAI JWT THEO TƯ DUY PERMISSION-BASED AUTHORIZATION (User-Feature-Permission-UserPermission) ======
+
+
+
+
+Bước 1: cài đặt các thư viện cần thiết trong API
+Microsoft.EntityFrameworkCore.SqlServer
+Microsoft.EntityFrameworkCore.Tools
+Microsoft.AspNetCore.Identity.EntityFrameworkCore
+Microsoft.AspNetCore.Authentication.JwtBearer
+----------------
+Bước 2: Cấu hình file appsettings.json
+
+"JWT": { "ValidAudience": "http://localhost:4200", 
+"ValidIssuer": "http://localhost:5000", 
+"Secret": "JWTRefreshTokenHIGHsecuredPasswordVVVp1OH7Xzyr", "TokenValidityInMinutes": 1,
+ "RefreshTokenValidityInDays": 7
+ }
+----------------
+Bước 3: Thêm Dependency Injection trong Program.cs
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]))
+    };
+});
+app.UseAuthentication(); 
+app.UseAuthorization();
+	
+---------------
+Bước 4: Trong hàm LOGIN (AuthServices)
+	- Thực hiện các bước lấy user theo thông tin login (kèm theo permission)
+	- Nếu user tồn tại, tạo authClaims (gồm ClaimTypes.Name, ClaimTypes.NameIdentifier, JwtRegisteredClaimNames.Jti, và 1 claim lưu permission)
+	- Tạo ra access_token từ authClaims, authSigningKey, valid issuer, valid audience, expires
+	- Tạo ra refresh_token và lưu vào db 
+	- Trả về ServiceResponse<LoginResponse> gồm thông tin 
+		LoginResponse
+                {
+                    Token = new JwtSecurityTokenHandler().WriteToken(token),
+                    ExpiredAt = token.ValidTo,
+		    RefreshToken = refreshToken,
+                    Username = user.Username,
+                    Fullname = user.Fullname
+                }; 
+	
+	return new ServiceResponse<LoginResponse>
+		{
+    			Success = true,
+    			StatusCode = (int)HttpStatusCode.OK,
+    			Message = CONSTANT.MESSAGE.SUCCESS,
+    			Data = response
+		};
+
+
+----------------------------------
+Bước 5: Trong API.Attributes:
+		- Tạo  class PermissionAttribute : TypeFilterAttribute
+	Trong API.Filters:
+		- Tạo class PermissionAuthorizationFilter : IAsyncAuthorizationFilter
+------------------------------
+Bước 6: Set authorize Trong controller:
+// GET: api/rooms/1
+ [Permission(CONSTANT.PERMISSION.ROOM.READ)]
+ [HttpGet("{id}")]
+ public async Task<IActionResult> GetRoomById(
+     int id)
+ {
+     var serviceResponse = await _roomServices.GetById(id);
+     return StatusCode(serviceResponse.StatusCode, serviceResponse);
+ }
+
+ // POST: api/rooms
+ [Permission(CONSTANT.PERMISSION.ROOM.CREATE)]
+ [HttpPost]
+ public async Task<IActionResult> CreateRoom(
+     [FromBody] CreateRoomRequest request)
+ {
+     var result = await _roomServices.Insert(request);
+     return StatusCode(result.StatusCode, result);
+ }
+

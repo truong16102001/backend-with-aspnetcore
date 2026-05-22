@@ -2,7 +2,7 @@
 
 namespace NetCore.DataAccess.IRepositories
 {
-    public interface IRoomRepository: IGenericRepository<Room>
+    public interface IUserRepository : IGenericRepository<User>
     {
     }
 }

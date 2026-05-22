@@ -1,10 +1,5 @@
 ﻿using NetCore.DataAccess.DBContext;
 using NetCore.DataAccess.IRepositories;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace NetCore.DataAccess.UnitOfWork
 {
@@ -13,12 +8,16 @@ namespace NetCore.DataAccess.UnitOfWork
         private readonly MyDbContext _dbContext;
 
         public IRoomRepository Rooms { get; }
+
+        public IUserRepository Users { get; }
+
         public UnitOfWork(
             MyDbContext dbContext,
-            IRoomRepository roomRepository)
+            IRoomRepository roomRepository, IUserRepository userRepository)
         {
             _dbContext = dbContext;
             Rooms = roomRepository;
+            Users = userRepository;
         }
 
         public async Task<int> SaveChangesAsync()
