@@ -11,13 +11,16 @@ namespace NetCore.DataAccess.UnitOfWork
 
         public IUserRepository Users { get; }
 
+        public IUserSessionRepository UserSessions {  get; }
+
         public UnitOfWork(
             MyDbContext dbContext,
-            IRoomRepository roomRepository, IUserRepository userRepository)
+            IRoomRepository roomRepository, IUserRepository userRepository, IUserSessionRepository userSessions)
         {
             _dbContext = dbContext;
             Rooms = roomRepository;
             Users = userRepository;
+            UserSessions = userSessions;
         }
 
         public async Task<int> SaveChangesAsync()

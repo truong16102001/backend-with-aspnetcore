@@ -35,5 +35,15 @@
                 public const string DELETE = "ROOM.DELETE";
             }
         }
+
+        public static class REDIS
+        {
+            public static class AUTH
+            {
+                public static string SESSION(string sid) => $"auth:sessions:{sid}";
+                public static string REFRESH_TOKENS(string hashRt) => $"auth:refresh_tokens:{hashRt}";
+                public static string USER_SESSIONS(int userId) => $"auth:user_sessions:{userId}";
+            }
+        }
     }
 }

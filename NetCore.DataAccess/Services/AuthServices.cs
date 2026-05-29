@@ -1,19 +1,12 @@
-﻿using BCrypt.Net;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
+﻿using Microsoft.EntityFrameworkCore;
 using NetCore.DataAccess.Common;
 using NetCore.DataAccess.DataObject.Common;
-using NetCore.DataAccess.DataObject.DTOs;
 using NetCore.DataAccess.DataObject.DTOs.Auth;
+using NetCore.DataAccess.DataObject.DTOs.Redis;
 using NetCore.DataAccess.DataObject.Entities;
 using NetCore.DataAccess.IServices;
 using NetCore.DataAccess.UnitOfWork;
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace NetCore.DataAccess.Services
 {
@@ -21,17 +14,21 @@ namespace NetCore.DataAccess.Services
     {
         private readonly IUnitOfWork _unitOfWork;
 
-        private readonly IConfiguration _configuration;
+        private readonly ITokenServices _tokenServices;
+
+        private readonly IRedisServices _redisServices;
 
         public AuthServices(
             IUnitOfWork unitOfWork,
-            IConfiguration configuration)
+            ITokenServices tokenServices, 
+            IRedisServices redisServices)
         {
             _unitOfWork = unitOfWork;
-            _configuration = configuration;
+            _tokenServices = tokenServices;
+            _redisServices = redisServices;
         }
 
-        public async Task<ServiceResponse<LoginResponse>> Login(LoginRequest request)
+        public async Task<ServiceResponse<LoginResponse>> Login(LoginRequest request, DeviceInfo deviceInfo)
         {
             try
             {
@@ -78,74 +75,57 @@ namespace NetCore.DataAccess.Services
                     };
                 }
 
-                // STEP 4:
-                // Create claims for JWT token
-                // =====================================================
-                //
-                // Claims = information stored inside token
-                //
-                // Example:
-                // - username, userid,  role, email
-                var authClaims = new List<Claim>
-                {
-                    new Claim(
-                        ClaimTypes.Name,
-                        user.Username),
+                string sid = Guid.NewGuid().ToString();
 
-                    new Claim(
-                        ClaimTypes.NameIdentifier,
-                        user.UserID.ToString()),
+                _tokenServices.GenerateAccessToken(user, sid, out string accessToken, out DateTime accessTokenExpiredAt);
 
-                    new Claim(
-                        JwtRegisteredClaimNames.Jti,
-                        Guid.NewGuid().ToString()),
+                // STEP 7: Create and refreshToken to db
+                _tokenServices.GenerateRefreshToken(out string refreshToken, out DateTime refreshExpiredAt);
+
+                string hashRt = _tokenServices.HashRefreshToken(refreshToken);
+
+                var session = new UserSession { 
+                    Sid = sid, 
+                    UserID = user.UserID, 
+                    RefreshTokenHash = hashRt, 
+                    DeviceID = deviceInfo.DeviceID,
+                    DeviceName = deviceInfo.DeviceName,
+                    IPAddress = deviceInfo.IPAddress,
+                    UserAgent = deviceInfo.UserAgent,
+                    CreatedAt = DateTime.UtcNow, 
+                    ExpiredAt = refreshExpiredAt, 
+                    IsRevoked = false 
                 };
 
-                foreach (var item in user.UserPermissions)
-                {
-                    string permissionValue =
-                        $"{item.Feature.FeatureCode}.{item.Permission.PermissionCode}";
+                await _unitOfWork.UserSessions.Insert(session);
 
-                    authClaims.Add(
-                        new Claim(
-                            "permission",
-                            permissionValue));
-                }
+                await _unitOfWork.SaveChangesAsync();
 
-                // STEP 5:
-                // Create secret key for signing token
-                var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:SecretKey"]));
+                var permissions = user.UserPermissions.Select(x => $"{x.Feature.FeatureCode}.{x.Permission.PermissionCode}").ToList();
 
-                // STEP 6:
-                // Generate JWT token
-                var token = new JwtSecurityToken(
-                    issuer:
-                        _configuration["JWT:ValidIssuer"],
+                var cachedSession = new CachedUserSession { 
+                    UserId = user.UserID, 
+                    Sid = sid, 
+                    RefreshTokenHash = hashRt, 
+                    Permissions = permissions, 
+                    DeviceName = deviceInfo.DeviceName,
+                    ExpiredAt = refreshExpiredAt 
+                };
 
-                    audience:
-                        _configuration["JWT:ValidAudience"],
+                TimeSpan ttl = refreshExpiredAt - DateTime.UtcNow;
 
-                    expires:
-                        DateTime.Now.AddMinutes(
-                            Convert.ToDouble(
-                                _configuration[
-                                    "JWT:TokenValidityInMinutes"])),
+                await _redisServices.SetSessionAsync(cachedSession, ttl);
 
-                    claims:
-                        authClaims,
+                await _redisServices.SetRefreshTokenAsync(hashRt, sid, ttl);
 
-                    signingCredentials:
-                        new SigningCredentials(
-                            authSigningKey,
-                            SecurityAlgorithms.HmacSha256)
-                );
-
-                //STEP 7: Create and refreshToken to db
+                await _redisServices.AddUserSessionAsync(user.UserID, sid, ttl);
 
                 var response = new LoginResponse
                 {
-                    Token = new JwtSecurityTokenHandler().WriteToken(token),
-                    ExpiredAt = token.ValidTo,
+                    AccessToken = accessToken,
+                    AccessTokenExpiredAt = accessTokenExpiredAt,
+                    RefreshToken = refreshToken,
+                    RefreshTokenExpiredAt = refreshExpiredAt,
                     Username = user.Username,
                     Fullname = user.Fullname
                 };
@@ -158,7 +138,7 @@ namespace NetCore.DataAccess.Services
                     Data = response
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<LoginResponse>
                 {
@@ -166,6 +146,201 @@ namespace NetCore.DataAccess.Services
                     StatusCode = (int)HttpStatusCode.InternalServerError,
                     Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
                     Data = null
+                };
+            }
+        }
+
+        public async Task<ServiceResponse<RefreshTokenResponse>> RefreshToken(string refreshToken)
+        {
+            try
+            {
+                // =================================================
+                // STEP 1:
+                // HASH REFRESH TOKEN
+                // =================================================
+                string hashRt = _tokenServices.HashRefreshToken(refreshToken);
+
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                {
+                    return new ServiceResponse<RefreshTokenResponse>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.Unauthorized,
+                        Message = "Refresh token missing"
+                    };
+                }
+
+                // =================================================
+                // STEP 2:
+                // LOOKUP REDIS
+                //
+                // auth:refresh_tokens:{hash_rt}
+                // =================================================
+                string? sid = await _redisServices.GetSessionIdByRefreshTokenAsync(hashRt);
+                CachedUserSession? cachedSession = null;
+
+                // =================================================
+                // STEP 3:
+                // REDIS HIT
+                // =================================================
+                if (!string.IsNullOrWhiteSpace(sid))
+                {
+                    cachedSession = await _redisServices.GetSessionAsync(sid);
+                }
+
+                // =================================================
+                // STEP 4:
+                // REDIS MISS
+                //
+                // ==> (**)
+                // fallback DB
+                // =================================================
+                if (cachedSession == null)
+                {
+                    // =============================================
+                    // GET VALID SESSION BY HASH_RT
+                    // =============================================
+                    var dbSession = await _unitOfWork.UserSessions.GetValidSessionByHashRtAsync(hashRt);
+
+                    // =============================================
+                    // CASE B2:
+                    // SESSION NOT FOUND
+                    // =============================================
+                    if (dbSession == null)
+                    {
+                        return new ServiceResponse<RefreshTokenResponse>
+                        {
+                            Success = false,
+                            StatusCode = (int)HttpStatusCode.Unauthorized,
+                            Message = "Refresh token expired or revoked"
+                        };
+                    }
+
+                    // =============================================
+                    // CASE B1:
+                    // REBUILD REDIS
+                    // =============================================
+                    var user = await _unitOfWork.Users.GetUserWithPermissionsAsync(dbSession.UserID);
+                    if (user == null)
+                    {
+                        return new ServiceResponse<RefreshTokenResponse>
+                        {
+                            Success = false,
+                            StatusCode = (int)HttpStatusCode.Unauthorized,
+                            Message = "User not found"
+                        };
+                    }
+
+                    var permissions = user.UserPermissions.Select(x => $"{x.Feature.FeatureCode}.{x.Permission.PermissionCode}").ToList();
+
+                    cachedSession = new CachedUserSession
+                    {
+                        UserId = dbSession.UserID,
+                        Sid = dbSession.Sid,
+                        RefreshTokenHash = dbSession.RefreshTokenHash,
+                        Permissions = permissions!,
+                        DeviceName = dbSession.DeviceName,
+                        ExpiredAt = dbSession.ExpiredAt
+                    };
+
+                    TimeSpan ttl = dbSession.ExpiredAt - DateTime.UtcNow;
+
+                    // rebuild redis
+                    await _redisServices.SetSessionAsync(cachedSession, ttl);
+                    await _redisServices.SetRefreshTokenAsync(dbSession.RefreshTokenHash, dbSession.Sid, ttl);
+                    await _redisServices.AddUserSessionAsync(dbSession.UserID, dbSession.Sid, ttl);
+                    sid = dbSession.Sid;
+                }
+
+                // =================================================
+                // STEP 5:
+                // GENERATE NEW ACCESS TOKEN
+                // =================================================
+                var userEntity = await _unitOfWork.Users.GetById(cachedSession.UserId);
+                if (userEntity == null)
+                {
+                    return new ServiceResponse<RefreshTokenResponse>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.Unauthorized,
+                        Message = "User not found"
+                    };
+                }
+
+                _tokenServices.GenerateAccessToken(userEntity!, cachedSession.Sid!, out string newAccessToken, out DateTime accessTokenExpiredAt);
+
+                // =================================================
+                // STEP 6:
+                // REFRESH TOKEN ROTATION
+                // =================================================
+                _tokenServices.GenerateRefreshToken(out string newRefreshToken, out DateTime refreshExpiredAt);
+                string newHashRt = _tokenServices.HashRefreshToken(newRefreshToken);
+
+                // =================================================
+                // STEP 7:
+                // UPDATE DB
+                // =================================================
+                var currentSession = await _unitOfWork.UserSessions.GetValidSessionBySidAsync(cachedSession.Sid!);
+                if (currentSession == null)
+                {
+                    return new ServiceResponse<RefreshTokenResponse>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.Unauthorized,
+                        Message = "Session revoked"
+                    };
+                }
+
+                currentSession!.RefreshTokenHash = newHashRt;
+                currentSession.ExpiredAt = refreshExpiredAt;
+                currentSession.LastActivityAt = DateTime.UtcNow;
+
+                await _unitOfWork.SaveChangesAsync();
+
+                // =================================================
+                // STEP 8:
+                // REMOVE OLD REDIS RT
+                // =================================================
+                await _redisServices.RemoveRefreshTokenAsync(cachedSession.RefreshTokenHash!);
+
+                // =================================================
+                // STEP 9:
+                // UPDATE REDIS SESSION
+                // =================================================
+                cachedSession.RefreshTokenHash = newHashRt;
+                cachedSession.ExpiredAt = refreshExpiredAt;
+                TimeSpan newTtl = refreshExpiredAt - DateTime.UtcNow;
+                await _redisServices.SetSessionAsync(cachedSession, newTtl);
+
+                // =================================================
+                // STEP 10:
+                // ADD NEW RT MAPPING
+                // =================================================
+                await _redisServices.SetRefreshTokenAsync(newHashRt, cachedSession.Sid!, newTtl);
+
+                // =================================================
+                // RESPONSE
+                // =================================================
+                return new ServiceResponse<RefreshTokenResponse>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = "Refresh token success",
+                    Data = new RefreshTokenResponse
+                    {
+                        AccessToken = newAccessToken,
+                        AccessTokenExpiredAt = accessTokenExpiredAt,
+                        RefreshToken = newRefreshToken,
+                        RefreshTokenExpiredAt = refreshExpiredAt
+                    }
+                };
+            }
+            catch (Exception) {
+                return new ServiceResponse<RefreshTokenResponse>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
                 };
             }
         }
@@ -194,8 +369,8 @@ namespace NetCore.DataAccess.Services
 
                 var user = new User
                 {
-                    Fullname = request.Fullname,
-                    Username = request.Username,
+                    Fullname = request.Fullname!,
+                    Username = request.Username!,
                     Password = passwordHash,
                 };
 
@@ -211,7 +386,318 @@ namespace NetCore.DataAccess.Services
                     Data = true
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
+            {
+                return new ServiceResponse<bool>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = false
+                };
+            }
+        }
+
+        public async Task<ServiceResponse<bool>> Logout(string? refreshToken)
+        {
+            try
+            {
+                // =================================================
+                // STEP 1:
+                // CHECK NULL REFRESH TOKEN
+                // =================================================
+
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                {
+                    return new ServiceResponse<bool>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.BadRequest,
+                        Message = "Refresh token is required",
+                        Data = false
+                    };
+                }
+
+                // =================================================
+                // STEP 2:
+                // HASH REFRESH TOKEN
+                // =================================================
+
+                string hashRt =
+                    _tokenServices
+                        .HashRefreshToken(refreshToken);
+
+                // =================================================
+                // STEP 3:
+                // GET SID FROM REDIS
+                //
+                // auth:refresh_tokens:{hash_rt}
+                // =================================================
+
+                string? sid =
+                    await _redisServices
+                        .GetSessionIdByRefreshTokenAsync(hashRt);
+
+                UserSession? dbSession = null;
+
+                // =================================================
+                // STEP 4:
+                // REDIS HIT
+                // =================================================
+
+                if (!string.IsNullOrWhiteSpace(sid))
+                {
+                    dbSession =
+                        await _unitOfWork
+                            .UserSessions
+                            .GetValidSessionBySidAsync(sid);
+                }
+
+                // =================================================
+                // STEP 5:
+                // REDIS MISS
+                //
+                // fallback DB
+                // =================================================
+
+                if (dbSession == null)
+                {
+                    dbSession =
+                        await _unitOfWork
+                            .UserSessions
+                            .GetValidSessionByHashRtAsync(hashRt);
+                }
+
+                // =================================================
+                // STEP 6:
+                // SESSION NOT FOUND
+                // =================================================
+
+                if (dbSession == null)
+                {
+                    return new ServiceResponse<bool>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.Unauthorized,
+                        Message = "Session not found",
+                        Data = false
+                    };
+                }
+
+                // =================================================
+                // STEP 7:
+                // SESSION ALREADY REVOKED
+                // =================================================
+
+                if (dbSession.IsRevoked)
+                {
+                    return new ServiceResponse<bool>
+                    {
+                        Success = true,
+                        StatusCode = (int)HttpStatusCode.OK,
+                        Message = "Session already logged out",
+                        Data = true
+                    };
+                }
+
+                // =================================================
+                // STEP 8:
+                // REVOKE SESSION IN DB
+                // =================================================
+
+                dbSession.IsRevoked = true;
+
+                dbSession.LastActivityAt = DateTime.UtcNow;
+
+                await _unitOfWork.SaveChangesAsync();
+
+                // =================================================
+                // STEP 9:
+                // REMOVE REDIS SESSION
+                //
+                // auth:sessions:{sid}
+                // =================================================
+                await _redisServices.RemoveSessionAsync(dbSession.Sid);
+
+                // =================================================
+                // STEP 10:
+                // REMOVE REDIS REFRESH TOKEN
+                //
+                // auth:refresh_tokens:{hash_rt}
+                // =================================================
+                await _redisServices.RemoveRefreshTokenAsync(dbSession.RefreshTokenHash);
+
+                // =================================================
+                // STEP 11:
+                // REMOVE USER SESSION
+                //
+                // auth:user_sessions:{user_id}
+                // =================================================
+                await _redisServices.RemoveUserSessionAsync(dbSession.UserID, dbSession.Sid);
+
+                // =================================================
+                // RESPONSE
+                // =================================================
+                return new ServiceResponse<bool>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = "Logout success",
+                    Data = true
+                };
+            }
+            catch (Exception)
+            {
+                return new ServiceResponse<bool>
+                {
+                    Success = false,
+                    StatusCode = (int)HttpStatusCode.InternalServerError,
+                    Message = CONSTANT.MESSAGE.INTERNAL_ERROR,
+                    Data = false
+                };
+            }
+        }
+
+        public async Task<ServiceResponse<bool>> LogoutAllDevices(string? refreshToken)
+        {
+            try
+            {
+                // =================================================
+                // STEP 1:
+                // CHECK NULL REFRESH TOKEN
+                // =================================================
+
+                if (string.IsNullOrWhiteSpace(refreshToken))
+                {
+                    return new ServiceResponse<bool>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.BadRequest,
+                        Message = "Refresh token is required",
+                        Data = false
+                    };
+                }
+
+                // =================================================
+                // STEP 2:
+                // HASH REFRESH TOKEN
+                // =================================================
+
+                string hashRt =
+                    _tokenServices
+                        .HashRefreshToken(refreshToken);
+
+                // =================================================
+                // STEP 3:
+                // FIND CURRENT SESSION
+                // =================================================
+
+                string? sid =
+                    await _redisServices
+                        .GetSessionIdByRefreshTokenAsync(hashRt);
+
+                UserSession? currentSession = null;
+
+                // =================================================
+                // STEP 4:
+                // REDIS HIT
+                // =================================================
+
+                if (!string.IsNullOrWhiteSpace(sid))
+                {
+                    currentSession =
+                        await _unitOfWork
+                            .UserSessions
+                            .GetValidSessionBySidAsync(sid);
+                }
+
+                // =================================================
+                // STEP 5:
+                // REDIS MISS
+                //
+                // fallback DB
+                // =================================================
+
+                if (currentSession == null)
+                {
+                    currentSession =
+                        await _unitOfWork
+                            .UserSessions
+                            .GetValidSessionByHashRtAsync(hashRt);
+                }
+
+                // =================================================
+                // STEP 6:
+                // SESSION NOT FOUND
+                // =================================================
+
+                if (currentSession == null)
+                {
+                    return new ServiceResponse<bool>
+                    {
+                        Success = false,
+                        StatusCode = (int)HttpStatusCode.Unauthorized,
+                        Message = "Session not found",
+                        Data = false
+                    };
+                }
+
+                // =================================================
+                // STEP 7:
+                // GET ALL ACTIVE SESSIONS OF USER
+                // =================================================
+
+                var userSessions =
+                    await _unitOfWork
+                        .UserSessions
+                        .GetAllValidSessionsByUserIdAsync(
+                            currentSession.UserID);
+
+                // =================================================
+                // STEP 8:
+                // REVOKE ALL SESSIONS IN DB
+                // =================================================
+
+                foreach (var session in userSessions)
+                {
+                    session.IsRevoked = true;
+                    session.LastActivityAt = DateTime.UtcNow;
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+
+                // =================================================
+                // STEP 9:
+                // REMOVE ALL REDIS CACHE
+                // =================================================
+
+                foreach (var session in userSessions)
+                {
+                    // =============================================
+                    // REMOVE auth:sessions:{sid}
+                    // =============================================
+                    await _redisServices.RemoveSessionAsync(session.Sid);
+
+                    // =============================================
+                    // REMOVE auth:refresh_tokens:{hash_rt}
+                    // =============================================
+                    await _redisServices.RemoveRefreshTokenAsync(session.RefreshTokenHash);
+
+                    // =============================================
+                    // REMOVE auth:user_sessions:{user_id}
+                    // =============================================
+                    await _redisServices.RemoveUserSessionAsync(session.UserID, session.Sid);
+                }
+
+                return new ServiceResponse<bool>
+                {
+                    Success = true,
+                    StatusCode = (int)HttpStatusCode.OK,
+                    Message = "Logout all devices success",
+                    Data = true
+                };
+            }
+            catch (Exception)
             {
                 return new ServiceResponse<bool>
                 {

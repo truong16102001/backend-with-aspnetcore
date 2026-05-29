@@ -7,9 +7,9 @@ namespace NetCore.DataAccess.DataObject.Entities
         [Key]
         public int FeatureID { get; set; }
 
-        public string FeatureCode { get; set; }
+        public string? FeatureCode { get; set; }
 
-        public string FeatureName { get; set; }
+        public string? FeatureName { get; set; }
 
         // Navigation
         public ICollection<UserPermission> UserPermissions { get; set; }

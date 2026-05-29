@@ -45,7 +45,7 @@ namespace NetCore.DataAccess.Services
                     Data = MapToResponse(room)
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<RoomResponse>
                 {
@@ -68,7 +68,7 @@ namespace NetCore.DataAccess.Services
                     request.RoomNumber))
                 {
                     query = query.Where(r =>
-                        r.RoomNumber.Contains(
+                        r.RoomNumber!.Contains(
                             request.RoomNumber));
                 }
 
@@ -89,7 +89,7 @@ namespace NetCore.DataAccess.Services
                     Data = result
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<List<RoomResponse>>
                 {
@@ -127,7 +127,7 @@ namespace NetCore.DataAccess.Services
                     Data = MapToResponse(room)
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<RoomResponse>
                 {
@@ -174,7 +174,7 @@ namespace NetCore.DataAccess.Services
                     Data = MapToResponse(room)
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<RoomResponse>
                 {
@@ -215,7 +215,7 @@ namespace NetCore.DataAccess.Services
                     Data = true
                 };
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 return new ServiceResponse<bool>
                 {
@@ -233,7 +233,7 @@ namespace NetCore.DataAccess.Services
             {
                 RoomID = room.RoomID,
                 HotelID = room.HotelID,
-                RoomNumber = room.RoomNumber,
+                RoomNumber = room.RoomNumber!,
                 RoomSquare = room.RoomSquare,
                 IsActive = room.IsActive == 1
             };

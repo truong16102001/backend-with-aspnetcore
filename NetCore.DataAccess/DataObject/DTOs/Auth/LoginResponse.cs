@@ -2,12 +2,17 @@
 {
     public class LoginResponse
     {
-        public string Token { get; set; }
+        public string? AccessToken { get; set; }
 
-        public DateTime ExpiredAt { get; set; }
+        public string? RefreshToken { get; set; }
 
-        public string Username { get; set; }
+        public DateTime AccessTokenExpiredAt { get; set; }
 
-        public string Fullname { get; set; }
+        public DateTime RefreshTokenExpiredAt { get; set; }
+
+        public string? Username { get; set; }
+
+        public string? Fullname { get; set; }
+
     }
 }

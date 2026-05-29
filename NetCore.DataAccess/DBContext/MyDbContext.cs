@@ -27,6 +27,8 @@ namespace NetCore.DataAccess.DBContext
 
         public DbSet<UserPermission> UserPermissions { get; set; }
 
+        public DbSet<UserSession> UserSessions { get; set; }
+
         // =========================
         // Fluent API Configuration
         // =========================

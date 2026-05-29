@@ -8,6 +8,8 @@ namespace NetCore.DataAccess.UnitOfWork
 
         IUserRepository Users { get; }
 
+        IUserSessionRepository UserSessions { get; }
+
         Task<int> SaveChangesAsync();
     }
 }

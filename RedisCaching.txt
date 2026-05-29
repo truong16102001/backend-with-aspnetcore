@@ -1,0 +1,50 @@
+====================== Cài đặt Redis Caching =========================
+1. Cài đặt nuget Microsoft.Extensions.Caching.StackExchangeRedis trong .API, DBACCESS
+Cài đặt nuget StackExchange.Redis trong .API, DBACCESS
+2. Cấu hình file appsetting.json
+ - "RedisCacheUrl": "127.0.0.1:6379",
+ - Trong Program.cs: builder.Services.AddStackExchangeRedisCache(options => { options.Configuration = configuration["RedisCacheUrl"]; });
+
+3. Cài redis server:
+ - Search Redis server github, tải Redis-x64-5.0.14.1.zip, chạy redis-server.exe
+ - Lên redis insign, login, vào Downloaded Center, chọn Redis Insign for Windows trong Modules, Tools & Integration rồi click Download
+ - Chạy Redis-Insight-win-installer(cái này như giao diện để mình nhìn đc) vừa tải về
+
+====================== Authentication & Authorization using Redis Caching =========================
+Đang thiết kế việc xác thực phân quyền theo mô hình user, permission, feature. Nên là danh sách permission sẽ lưu ở auth:session trên redis, còn access_token chỉ chứa sid
+(*)Get user_sessions by session_id and IsRevoked = false and ExpiredAt > now 
+		CASE B1 — FOUND
+			=> rebuild Redis cache (auth:sessions:{sid}, auth:refresh_tokens:{hash_rt}). Then continue request.
+		CASE B2 — NOT FOUND (chứng tỏ đã bị xóa hoặc revoke hoặc hết hạn hoặc người dùng đã logout)
+			=> Thực hiện login lại
+(**)Get user_sessions by hash_rt
+		CASE B1 — FOUND
+			=> rebuild Redis cache (auth:sessions:{sid}, auth:refresh_tokens:{hash_rt}). Then continue request.
+		CASE B2 — NOT FOUND (chứng tỏ đã bị xóa hoặc revoke hoặc hết hạn hoặc người dùng đã logout)
+			=> Thực hiện login lại
+1. User login by username + password
+- Sinh ra access_token(jti, sub, sid), refresh_token(random string)
+	+ Tạo user_session và lưu vào bảng user_sessions trong DB 
+	+ Set trên redis 
+		auth:sessions:{sid} with expired = refresh_token's expired (trên redis có thêm cả permissions)
+		auth:refresh_tokens:{hash_rt} value = session_id
+		auth:user_sessions:{user_id} (dùng để tìm kiếm tất cả session của 1 user, vì mỗi session có thể trên 1 thiết bị)
+	+ Set trên cookies
+		 access_token (expired =  _configuration["JWT:TokenValidityInMinutes"])
+     	      	 refresh_token (expired =  _configuration["JWT:RefreshTokenValidityInDays"]) 
+2. Khi user request (Ví dụ POST /rooms)
+- Trên middleware/filter, decode jwt lấy sid tìm trên redis: auth:sessions:{sid} để check quyền
+	+ Tìm thấy session --> Thực hiện check quyền
+	+ Không tìm thấy session (có thể do restart redis nên bị mất) --> Thực hiện (*)
+			
+3. Khi token hết hạn 
+	+ access_token hết hạn (trên cookies đã xóa access_token) thì gọi api /refresh-token 
+		(truyền refresh-token từ cookies, service sẽ xử lý hash và lookup với auth:refresh_tokens:{hash_RT})
+		Nếu tìm thấy sẽ tiếp tục lookup auth:sessions:{sid} 
+			Khi refresh được access_token thì nên renew lại refresh_token và xóa auth:refresh_tokens:{old_hash_rt}, add auth:refresh_tokens:{new_hash_rt} và update new_refresh_token trong user_sessions 
+		Nếu không tìm thấy, ==> Thực hiện (**)
+ 	+ refresh_token hết hạn (trên cookies đã xóa refresh_token)
+		Redis tự xóa key theo TTL — không cần làm gì. DB giữ record lại để audit, 
+		dùng background job dọn dẹp sau 30 ngày. 
+		Login lại thì INSERT session mới — không ghi đè session cũ vì 1 user có thể đa thiết bị.
+
