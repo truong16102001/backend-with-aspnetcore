@@ -44,6 +44,13 @@
                 public static string REFRESH_TOKENS(string hashRt) => $"auth:refresh_tokens:{hashRt}";
                 public static string USER_SESSIONS(int userId) => $"auth:user_sessions:{userId}";
             }
+
+            public static class ROOM
+            {
+                public static string DETAIL(int roomId) => $"room:detail:{roomId}";
+
+                public static string LIST(string key) => $"rooms:list:{key}";
+            }
         }
     }
 }

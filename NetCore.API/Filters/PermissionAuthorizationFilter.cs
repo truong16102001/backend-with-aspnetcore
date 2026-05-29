@@ -28,7 +28,6 @@ namespace NetCore.API.Filters
             // STEP 1:
             // CHECK AUTHENTICATED
             // =====================================================
-
             bool isAuthenticated =
                 context.HttpContext.User.Identity
                     ?.IsAuthenticated ?? false;
@@ -45,7 +44,6 @@ namespace NetCore.API.Filters
             // STEP 2:
             // GET SID FROM JWT
             // =====================================================
-
             string? sid =
                 context.HttpContext.User
                     .FindFirst("sid")
@@ -63,7 +61,6 @@ namespace NetCore.API.Filters
             // STEP 3:
             // GET SESSION FROM REDIS
             // =====================================================
-
             var cachedSession =
                 await _redisServices
                     .GetSessionAsync(sid);
@@ -74,7 +71,6 @@ namespace NetCore.API.Filters
             // REDIS MISS
             // (maybe redis restart / cache expired)
             // =====================================================
-
             if (cachedSession == null)
             {
                 // =================================================
@@ -85,7 +81,6 @@ namespace NetCore.API.Filters
                 // - IsRevoked = false
                 // - ExpiredAt > now
                 // =================================================
-
                 var dbSession =
                     await _unitOfWork.UserSessions
                         .GetValidSessionBySidAsync(sid);
@@ -96,7 +91,6 @@ namespace NetCore.API.Filters
                 //
                 // -> login again
                 // =================================================
-
                 if (dbSession == null)
                 {
                     context.Result =
@@ -116,7 +110,6 @@ namespace NetCore.API.Filters
                 //
                 // -> rebuild redis cache
                 // =================================================
-
                 var user =
                     await _unitOfWork.Users
                         .GetUserWithPermissionsAsync(
@@ -125,7 +118,6 @@ namespace NetCore.API.Filters
                 // =================================================
                 // BUILD PERMISSIONS
                 // =================================================
-
                 var permissions =
                     user!.UserPermissions
                         .Select(x =>
@@ -135,7 +127,6 @@ namespace NetCore.API.Filters
                 // =================================================
                 // BUILD REDIS SESSION DTO
                 // =================================================
-
                 cachedSession =
                     new CachedUserSession
                     {
@@ -161,16 +152,12 @@ namespace NetCore.API.Filters
                 // =================================================
                 // REDIS TTL
                 // =================================================
-
-                TimeSpan ttl =
-                    dbSession.ExpiredAt
-                    - DateTime.UtcNow;
+                TimeSpan ttl = dbSession.ExpiredAt - DateTime.UtcNow;
 
                 // =================================================
                 // REBUILD:
                 // auth:sessions:{sid}
                 // =================================================
-
                 await _redisServices
                     .SetSessionAsync(
                         cachedSession,
@@ -180,7 +167,6 @@ namespace NetCore.API.Filters
                 // REBUILD:
                 // auth:refresh_tokens:{hash_rt}
                 // =================================================
-
                 await _redisServices
                     .SetRefreshTokenAsync(
                         dbSession.RefreshTokenHash,
@@ -191,7 +177,6 @@ namespace NetCore.API.Filters
                 // REBUILD:
                 // auth:user_sessions:{userId}
                 // =================================================
-
                 await _redisServices
                     .AddUserSessionAsync(
                         dbSession.UserID,
@@ -216,10 +201,7 @@ namespace NetCore.API.Filters
             // STEP 5:
             // CHECK PERMISSION
             // =====================================================
-
-            bool hasPermission =
-                cachedSession.Permissions
-                    .Contains(_permission);
+            bool hasPermission = cachedSession.Permissions.Contains(_permission);
 
             if (!hasPermission)
             {

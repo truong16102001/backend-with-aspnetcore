@@ -4,22 +4,43 @@ namespace NetCore.DataAccess.IServices
 {
     public interface IRedisServices
     {
-        Task SetSessionAsync(CachedUserSession session, TimeSpan expiry); 
+        // =====================================================
+        // GENERIC CACHE
+        // =====================================================
+        Task SetAsync<T>(string key, T data, TimeSpan expiry);
 
-        Task<CachedUserSession?> GetSessionAsync(string sid); 
+        Task<T?> GetAsync<T>(string key);
 
-        Task RemoveSessionAsync(string sid); 
+        Task RemoveAsync(string key);
 
-        Task SetRefreshTokenAsync(string hashRt, string sid, TimeSpan expiry); 
+        Task RemoveByPrefixAsync(string prefix);
 
-        Task<string?> GetSessionIdByRefreshTokenAsync(string hashRt); 
+        // =====================================================
+        // AUTH SESSION
+        // =====================================================
+        Task SetSessionAsync(CachedUserSession session, TimeSpan expiry);
 
-        Task RemoveRefreshTokenAsync(string hashRt); 
+        Task<CachedUserSession?> GetSessionAsync(string sid);
 
-        Task AddUserSessionAsync(int userId, string sid, TimeSpan ttl); 
+        // =====================================================
+        // REFRESH TOKEN
+        // =====================================================
+        Task SetRefreshTokenAsync(string hashRt, string sid, TimeSpan expiry);
 
-        Task<List<string>> GetUserSessionsAsync(int userId); 
+        Task<string?> GetSessionIdByRefreshTokenAsync(string hashRt);
+
+        Task RemoveRefreshTokenAsync(string hashRt);
+
+        // =====================================================
+        // USER SESSIONS
+        // =====================================================
+        Task AddUserSessionAsync(int userId, string sid, TimeSpan ttl);
+
+        Task<List<string>> GetUserSessionsAsync(int userId);
 
         Task RemoveUserSessionAsync(int userId, string sid);
+
+        Task RemoveSessionAsync(string sid);
+        
     }
 }

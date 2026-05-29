@@ -9,19 +9,12 @@ namespace NetCore.DataAccess.DataObject.Entities
 
         public int HotelID { get; set; }
 
-        public string? RoomNumber { get; set; }
+        public string? RoomCode { get; set; }
 
         public int RoomSquare { get; set; }
 
         public int IsActive { get; set; }
 
-        public Hotel Hotel { get; set; }
+        public Hotel? Hotel { get; set; }
     }
-
-    public class RoomRequest
-    {
-        public string? RoomNumber { get; set; }
-
-    }
-
 }
