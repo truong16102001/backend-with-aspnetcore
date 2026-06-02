@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using NetCore.DataAccess.Dapper;
 using NetCore.DataAccess.DBContext;
 using NetCore.DataAccess.IRepositories;
 using NetCore.DataAccess.IServices;
@@ -20,6 +21,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IRoomRepository, RoomRepository>();
+builder.Services.AddScoped<IHotelRepository, HotelRepository>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserSessionRepository, UserSessionRepository>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
@@ -27,6 +29,10 @@ builder.Services.AddScoped<IAuthServices, AuthServices>();
 builder.Services.AddScoped<IRoomServices, RoomServices>();
 builder.Services.AddScoped<ITokenServices, TokenServices>();
 builder.Services.AddScoped<ICookieServices, CookieServices>();
+builder.Services.AddScoped<IDbConnectionFactory, SqlServerConnectionFactory>();
+builder.Services.AddScoped<IApplicationDbConnection, ApplicationDbConnection>();
+builder.Services.AddScoped<IHotelServices, HotelServices>();
+
 
 builder.Services.AddDbContext<MyDbContext>(options =>
                options.UseSqlServer(configuration.GetConnectionString("ConnStr")));

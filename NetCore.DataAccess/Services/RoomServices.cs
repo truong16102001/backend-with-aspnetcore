@@ -13,13 +13,6 @@ namespace NetCore.DataAccess.Services
     {
         private readonly IUnitOfWork _unitOfWork;
         private readonly IRedisServices _redis;
-        private static readonly TimeSpan CacheTTL = TimeSpan.FromMinutes(10);
-
-        // Tách 2 loại key rõ ràng
-        private static string RoomKey(int id) => $"rooms:{id}";
-        private static string RoomListPrefix() => "rooms:list:";
-        private static string RoomListKey(RoomRequest r) =>
-            $"rooms:list:{r.RoomCode ?? "all"}:{r.PageNumber}:{r.PageSize}";
 
         public RoomServices(IUnitOfWork unitOfWork, IRedisServices redis)
         {
@@ -44,7 +37,7 @@ namespace NetCore.DataAccess.Services
                 await _unitOfWork.SaveChangesAsync();
 
                 // List thay đổi (có item mới) → xóa toàn bộ list cache
-                await _redis.RemoveByPrefixAsync(RoomListPrefix());
+                await _redis.RemoveByPrefixAsync(CONSTANT.REDIS.ROOM.LIST_PREFIX());
 
                 return new ServiceResponse<RoomResponse>
                 {
@@ -70,7 +63,7 @@ namespace NetCore.DataAccess.Services
         {
             try
             {
-                var cacheKey = RoomListKey(request);
+                var cacheKey = CONSTANT.REDIS.ROOM.LIST(request);
 
                 // 1. Get on Redis
                 var cached = await _redis.GetAsync<PagedResponse<RoomResponse>>(cacheKey);
@@ -103,14 +96,14 @@ namespace NetCore.DataAccess.Services
 
                 var paged = new PagedResponse<RoomResponse>
                 {
-                    Data = rooms.Select(MapToResponse).ToList(),
+                    Items = rooms.Select(MapToResponse).ToList(),
                     Page = request.PageNumber,
                     PageSize = request.PageSize,
                     TotalCount = totalCount
                 };
 
                 // 3. Warm Redis
-                await _redis.SetAsync(cacheKey, paged, CacheTTL);
+                await _redis.SetAsync(cacheKey, paged, CONSTANT.REDIS.CACHE_TTL.ROOM);
 
                 return new ServiceResponse<PagedResponse<RoomResponse>>
                 {
@@ -137,7 +130,7 @@ namespace NetCore.DataAccess.Services
             try
             {
                 // 1. Get on Redis
-                var cached = await _redis.GetAsync<RoomResponse>(RoomKey(id));
+                var cached = await _redis.GetAsync<RoomResponse>(CONSTANT.REDIS.ROOM.DETAIL(id));
                 if (cached != null)
                 {
                     return new ServiceResponse<RoomResponse>
@@ -165,7 +158,7 @@ namespace NetCore.DataAccess.Services
                 var response = MapToResponse(room);
 
                 // 3. Warm Redis
-                await _redis.SetAsync(RoomKey(id), response, CacheTTL);
+                await _redis.SetAsync(CONSTANT.REDIS.ROOM.DETAIL(id), response, CONSTANT.REDIS.CACHE_TTL.ROOM);
 
                 return new ServiceResponse<RoomResponse>
                 {
@@ -216,8 +209,8 @@ namespace NetCore.DataAccess.Services
 
                 // Song song: item đã thay đổi + list chứa item này
                 await Task.WhenAll(
-                    _redis.RemoveAsync(RoomKey(id)),
-                    _redis.RemoveByPrefixAsync(RoomListPrefix())
+                    _redis.RemoveAsync(CONSTANT.REDIS.ROOM.DETAIL(id)),
+                    _redis.RemoveByPrefixAsync(CONSTANT.REDIS.ROOM.LIST_PREFIX())
                 );
 
                 return new ServiceResponse<RoomResponse>
@@ -263,8 +256,8 @@ namespace NetCore.DataAccess.Services
 
                 // Song song: item không còn tồn tại + list đã thay đổi
                 await Task.WhenAll(
-                    _redis.RemoveAsync(RoomKey(id)),
-                    _redis.RemoveByPrefixAsync(RoomListPrefix())
+                    _redis.RemoveAsync(CONSTANT.REDIS.ROOM.DETAIL(id)),
+                    _redis.RemoveByPrefixAsync(CONSTANT.REDIS.ROOM.LIST_PREFIX())
                 );
 
                 return new ServiceResponse<bool>

@@ -1,4 +1,7 @@
-﻿namespace NetCore.DataAccess.Common
+﻿using NetCore.DataAccess.DataObject.DTOs.Hotel;
+using NetCore.DataAccess.DataObject.DTOs.Room;
+
+namespace NetCore.DataAccess.Common
 {
     public static class CONSTANT
     {
@@ -45,11 +48,29 @@
                 public static string USER_SESSIONS(int userId) => $"auth:user_sessions:{userId}";
             }
 
+            public static class HOTEL
+            {
+                public static string DETAIL(int id) => $"hotels:{id}";
+                public static string LIST_PREFIX() => "hotels:list:";
+                public static string LIST(HotelRequest r) =>
+                    $"hotels:list:{r.HotelName?.Trim().ToLower() ?? "all"}:{r.PageNumber}:{r.PageSize}";
+            }
+
             public static class ROOM
             {
-                public static string DETAIL(int roomId) => $"room:detail:{roomId}";
+                public static string DETAIL(int roomId) => $"rooms:{roomId}";
 
-                public static string LIST(string key) => $"rooms:list:{key}";
+                public static string LIST(RoomRequest r) =>
+                    $"rooms:list:{r.RoomCode?.Trim().ToLower() ?? "all"}:{r.PageNumber}:{r.PageSize}";
+
+                public static string LIST_PREFIX() => "rooms:list:";
+            }
+
+            public static class CACHE_TTL
+            {
+                public static readonly TimeSpan ROOM = TimeSpan.FromMinutes(10);
+
+                public static readonly TimeSpan HOTEL = TimeSpan.FromMinutes(10);
             }
         }
     }

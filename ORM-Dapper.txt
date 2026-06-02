@@ -1,0 +1,5 @@
+1. Cài đặt nuget Dapper trong DataAccess
+2. - Tạo !ApplicationDBConnection, ApplicationDBConnection
+   - Tạo IDbConnectionFactory, SqlServerConnectionFactory (đối với sql server)
+3. Tạo repository, service
+4. Dependency Injection trong program.cs

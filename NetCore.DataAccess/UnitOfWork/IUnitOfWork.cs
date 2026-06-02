@@ -10,6 +10,8 @@ namespace NetCore.DataAccess.UnitOfWork
 
         IUserSessionRepository UserSessions { get; }
 
+        IHotelRepository Hotels { get; }
+
         Task<int> SaveChangesAsync();
     }
 }
